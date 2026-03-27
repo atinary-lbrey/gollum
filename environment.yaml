@@ -24,6 +24,5 @@ dependencies:
       - openai
       - peft
       - drfp
-      - rxnfp
       - matplotlib
       - jsonargparse

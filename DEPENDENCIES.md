@@ -7,6 +7,7 @@ For pip users, you can install all required packages with:
 
 ```bash
 pip install -r requirements.txt
+pip install --no-deps rxnfp
 ```
 
 ## 🧪 Reproducible Conda Environment
@@ -16,6 +17,7 @@ For a fully reproducible environment using conda:
 ```bash
 conda env create -f environment.yaml
 conda activate gollum
+pip install --no-deps rxnfp
 ```
 
 ## Notes

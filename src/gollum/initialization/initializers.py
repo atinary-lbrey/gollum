@@ -4,9 +4,9 @@ from typing import List
 
 import numpy as np
 import torch
+import kmedoids
 from scipy.spatial.distance import cdist
 from sklearn.cluster import KMeans
-from sklearn_extra.cluster import KMedoids
 from sklearn.decomposition import PCA
 
 
@@ -135,26 +135,30 @@ class KMedoidsInitializer(Initializer):
 
     def fit(self, x, exclude=None):
         x_init = torch_delete_rows(x, exclude)
-        kmedoids = KMedoids(
+        x_init_np = x_init.numpy() if isinstance(x_init, torch.Tensor) else np.asarray(x_init)
+        distance_matrix = cdist(x_init_np, x_init_np, metric=self.metric)
+
+        kmedoids_model = kmedoids.KMedoids(
             n_clusters=self.n_clusters,
+            metric="precomputed",
             init=self.init_method,
             random_state=self.seed,
-            metric=self.metric,
             max_iter=5000,
-        ).fit(x_init)
+            method="fasterpam",
+        ).fit(distance_matrix)
 
-        labels = kmedoids.labels_
-        cluster_centers_indices = kmedoids.medoid_indices_
+        labels = kmedoids_model.labels
+        cluster_centers_indices = kmedoids_model.medoid_indices
         clusters = {}
 
         for label in range(len(cluster_centers_indices)):
             center_index = cluster_centers_indices[label]
-            distances = np.linalg.norm(x_init - x_init[center_index, :], axis=1)
+            distances = distance_matrix[:, center_index]
             cluster_indices = np.where(labels == label)[0]
             sorted_indices = sorted(cluster_indices, key=lambda i: distances[i])
             clusters[label] = sorted_indices
 
-        return kmedoids.medoid_indices_.tolist(), clusters
+        return cluster_centers_indices.tolist(), clusters
 
 
 class BOInitializer:

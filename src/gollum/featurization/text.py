@@ -26,8 +26,6 @@ from InstructorEmbedding import INSTRUCTOR
 
 from openai import OpenAI
 
-client = OpenAI()
-
 from transformers import AutoTokenizer
 from gollum.featurization.utils.pooling import average_pool, last_token_pool, weighted_average_pool
 
@@ -37,6 +35,7 @@ from gollum.featurization.utils.pooling import average_pool, last_token_pool, we
 
 @lru_cache(maxsize=None)
 def get_embedding(text, model="text-embedding-3-large"):
+    client = OpenAI()
     text = text.replace("\n", " ")
     return (
         client.embeddings.create(input=[text], model=model).data[0].embedding
@@ -110,7 +109,7 @@ def get_model_and_tokenizer(model_name: str, device: str='cuda'):
 
     if model_config := MODEL_CONFIGS.get(model_name):
         config = model_config.config_class.from_pretrained(model_name)
-        setattr(config, model_config.dropout_field, 0)
+        setattr(config, model_config.dropout_field, 0.0)
         model = model_config.model_class.from_pretrained(
             model_name, config=config
         ).to(device)
