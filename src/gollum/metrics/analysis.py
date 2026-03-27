@@ -2,7 +2,6 @@ import pandas as pd
 from typing import Dict, Optional
 import numpy as np
 import torch
-from pytorch_metric_learning import distances as dist
 from bochemian.surrogate_models.gp import SurrogateModel
 
 

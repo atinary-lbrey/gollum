@@ -3,8 +3,6 @@ import os
 from typing import Optional
 import torch
 
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
-torch.cuda.empty_cache()
 
 import numpy as np
 
@@ -25,21 +23,26 @@ from sentence_transformers import SentenceTransformer
 from InstructorEmbedding import INSTRUCTOR
 
 from openai import OpenAI
+from transformers import T5EncoderModel
+from transformers import T5Config
+from transformers import LlamaModel, LlamaConfig
 
-from transformers import AutoTokenizer
-from gollum.featurization.utils.pooling import average_pool, last_token_pool, weighted_average_pool
 
+from gollum.featurization.utils.pooling import (
+    average_pool,
+    last_token_pool,
+    weighted_average_pool,
+)
 
-
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
+torch.cuda.empty_cache()
 
 
 @lru_cache(maxsize=None)
 def get_embedding(text, model="text-embedding-3-large"):
     client = OpenAI()
     text = text.replace("\n", " ")
-    return (
-        client.embeddings.create(input=[text], model=model).data[0].embedding
-    )
+    return client.embeddings.create(input=[text], model=model).data[0].embedding
 
 
 def ada_embeddings(texts, model="text-embedding-ada-002"):
@@ -69,13 +72,6 @@ def ada_embeddings_3(texts, model="text-embedding-3-small"):
     return ada_embeddings(texts, model=model)
 
 
-from transformers import T5Tokenizer, T5EncoderModel
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-from transformers import T5EncoderModel, T5Config
-from transformers import LlamaModel, LlamaConfig
-
-
-
 @dataclass
 class ModelConfig:
     name: str
@@ -100,19 +96,16 @@ MODEL_CONFIGS = {
 }
 
 
-def get_model_and_tokenizer(model_name: str, device: str='cuda'):
-
-    tokenizer = AutoTokenizer.from_pretrained(
-        model_name, trust_remote_code=True
-    )
+def get_model_and_tokenizer(model_name: str, device: str = "cuda"):
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     tokenizer.pad_token = tokenizer.pad_token or tokenizer.eos_token
 
     if model_config := MODEL_CONFIGS.get(model_name):
         config = model_config.config_class.from_pretrained(model_name)
         setattr(config, model_config.dropout_field, 0.0)
-        model = model_config.model_class.from_pretrained(
-            model_name, config=config
-        ).to(device)
+        model = model_config.model_class.from_pretrained(model_name, config=config).to(
+            device
+        )
     else:
         model = AutoModel.from_pretrained(
             model_name, device_map=device, trust_remote_code=True
@@ -124,7 +117,6 @@ def get_model_and_tokenizer(model_name: str, device: str='cuda'):
 def get_tokens(
     texts,
     model_name="WhereIsAI/UAE-Large-V1",
-    batch_size=32,
     device="cuda" if torch.cuda.is_available() else "cpu",
 ):
     print(model_name, "for get tokens")
@@ -132,7 +124,6 @@ def get_tokens(
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 
-    encoded_batches = []
     encoded_input = tokenizer(
         texts,
         padding=True,
@@ -151,9 +142,7 @@ def get_tokens(
         batch_first=True,
         padding_value=0,
     )
-    all_encoded_inputs = torch.cat(
-        [input_ids_padded, attention_masks_padded], dim=1
-    )
+    all_encoded_inputs = torch.cat([input_ids_padded, attention_masks_padded], dim=1)
     return all_encoded_inputs.cpu().numpy()
 
 
@@ -247,9 +236,7 @@ def instructor_embeddings(
     :return: NumPy array of Instructor embeddings
     """
     # Load the INSTRUCTOR model
-    model = INSTRUCTOR(model_name).to(
-        "cuda" if torch.cuda.is_available() else "cpu"
-    )
+    model = INSTRUCTOR(model_name).to("cuda" if torch.cuda.is_available() else "cpu")
 
     batch_size = 32
     sentence_embeddings_list = []
@@ -261,21 +248,4 @@ def instructor_embeddings(
         )
         sentence_embeddings_list.append(batch_embeddings)
 
-
     return np.concatenate(sentence_embeddings_list, axis=0)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

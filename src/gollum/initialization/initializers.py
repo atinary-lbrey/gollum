@@ -135,7 +135,9 @@ class KMedoidsInitializer(Initializer):
 
     def fit(self, x, exclude=None):
         x_init = torch_delete_rows(x, exclude)
-        x_init_np = x_init.numpy() if isinstance(x_init, torch.Tensor) else np.asarray(x_init)
+        x_init_np = (
+            x_init.numpy() if isinstance(x_init, torch.Tensor) else np.asarray(x_init)
+        )
         distance_matrix = cdist(x_init_np, x_init_np, metric=self.metric)
 
         kmedoids_model = kmedoids.KMedoids(

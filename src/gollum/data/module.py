@@ -14,6 +14,7 @@ from gollum.data.utils import find_duplicates, find_nan_rows
 from gollum.featurization.base import Featurizer
 from abc import ABC
 import os
+
 os.environ["OMP_NUM_THREADS"] = "28"
 
 
@@ -86,15 +87,12 @@ class BaseDataModule(pl.LightningDataModule, ABC):
         print(f"Selected reactions: {init_indexes}")
 
         train_df_indices = self.original_indices[init_indexes].tolist()
-        self.train_indexes = (
-            init_indexes  
-        )
+        self.train_indexes = init_indexes
 
         all_index_set = set(self.original_indices.tolist())
         train_index_set = set(train_df_indices)
         heldout_df_indices = list(all_index_set - train_index_set)
 
-       
         self.train_x = self.x[init_indexes]
         self.train_y = self.y[init_indexes]
 
@@ -116,13 +114,11 @@ class BaseDataModule(pl.LightningDataModule, ABC):
         train_df = self.data.loc[train_df_indices].copy()
         heldout_df = self.data.loc[self.heldout_indices.tolist()].copy()
         self.data = pd.concat([train_df, heldout_df])
-        
 
     def update_results(self, experiment_results, experiment_indices):
         if self.target_column not in self.data.columns:
             self.data[self.target_column] = 0.0
 
-        
         self.y[experiment_indices] = experiment_results
 
         self.train_y = torch.cat([self.train_y, experiment_results], dim=0)

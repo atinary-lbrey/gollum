@@ -3,21 +3,41 @@ from botorch.exceptions import InputDataWarning
 
 import re
 import torch
+
+from pytorch_lightning import seed_everything
+import wandb
+from tqdm import tqdm
+from gollum.utils.config import flatten
+
+from jsonargparse import (
+    ArgumentParser,
+    ActionConfigFile,
+)
+from gollum.utils.config import instantiate_class
+from botorch.acquisition import AcquisitionFunction
+from gollum.surrogate_models.gp import SurrogateModel
+
+
+import numpy as np
+import pandas as pd
 import logging
+
+from gollum.data.module import BaseDataModule
+from gollum.bo.optimizer import BotorchOptimizer
+
+
+from gollum.metrics import (
+    calculate_data_stats,
+    log_bo_metrics,
+    log_data_stats,
+)
 
 warnings.filterwarnings("ignore", category=InputDataWarning)
 logger = logging.getLogger("pytorch_lightning.utilities.rank_zero")
 warnings.filterwarnings(
     "ignore",
-    message="ExpectedImprovement has known numerical issues that lead to suboptimal optimization performance"
+    message="ExpectedImprovement has known numerical issues that lead to suboptimal optimization performance",
 )
-
-class IgnoreDeviceFilter(logging.Filter):
-    def filter(self, record):
-        return "available:" not in record.getMessage()
-
-
-logger.addFilter(IgnoreDeviceFilter())
 
 
 warnings.filterwarnings(
@@ -40,39 +60,15 @@ warnings.filterwarnings(
     module="pytorch_lightning.trainer.connectors.data_connector",
 )
 
-from gollum.data.module import BaseDataModule
-from gollum.bo.optimizer import BotorchOptimizer
+
+class IgnoreDeviceFilter(logging.Filter):
+    def filter(self, record):
+        return "available:" not in record.getMessage()
 
 
-from gollum.metrics import (
-    calculate_data_stats,
-    log_bo_metrics,
-    log_data_stats,
-)
-
-
-
+logger.addFilter(IgnoreDeviceFilter())
 torch.set_float32_matmul_precision("high")
 
-
-from pytorch_lightning import seed_everything
-import wandb
-from tqdm import tqdm
-from gollum.utils.config import flatten
-
-from jsonargparse import (
-    ArgumentParser,
-    ActionConfigFile,
-)
-from gollum.utils.config import instantiate_class
-from botorch.acquisition import AcquisitionFunction
-from gollum.surrogate_models.gp import SurrogateModel
-
-
-
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 MODEL_EMBEDDING_SIZES = {
     "WhereIsAI/UAE-Large-V1": 1024,
@@ -83,7 +79,7 @@ MODEL_EMBEDDING_SIZES = {
     "text-embedding-3-large": 3072,
     "nomic-ai/modernbert-embed-base;get_huggingface_embeddings;normalize:False;pooling:cls": 768,
     "Qwen/Qwen2-7B-Instruct;get_huggingface_embeddings;normalize:False;pooling:last_token": 3584,
-    "GT4SD/multitask-text-and-chemistry-t5-base-augm": 768, 
+    "GT4SD/multitask-text-and-chemistry-t5-base-augm": 768,
 }
 
 
@@ -107,7 +103,6 @@ def configure_pooling_method(config, model_name):
         "GT4SD/multitask-text-and-chemistry-t5-base-augm-from-rxn": "average",
         "t5-base": "average",
         "Qwen/Qwen2-7B-Instruct": "last_token_pool",
-      
     }
 
     if model_name in hugging_face_models:
@@ -119,10 +114,7 @@ def configure_pooling_method(config, model_name):
             f"Model {model_name} not found in supported models. Please specify pooling method manually."
         )
 
-    if (
-        config["surrogate_model"]["class_path"]
-        in ["gollum.surrogate_models.gp.DeepGP"]
-    ):
+    if config["surrogate_model"]["class_path"] in ["gollum.surrogate_models.gp.DeepGP"]:
         config["surrogate_model"]["init_args"]["finetuning_model"]["init_args"][
             "pooling_method"
         ] = hugging_face_models[model_name]
@@ -136,13 +128,12 @@ def configure_benchmark_datasets(config):
     if benchmark.startswith("bh"):
         reaction_num = benchmark[-1]
 
-        config["data"]["init_args"][
-            "data_path"
-        ] = f"data/reactions/buchwald-hartwig/bh_reaction_{reaction_num}_procedure_template_basic.csv"
-        
+        config["data"]["init_args"]["data_path"] = (
+            f"data/reactions/buchwald-hartwig/bh_reaction_{reaction_num}_procedure_template_basic.csv"
+        )
+
         config["data"]["init_args"]["target_column"] = "objective"
         config["data"]["init_args"]["maximize"] = True
-    
 
     return config
 
@@ -150,26 +141,37 @@ def configure_benchmark_datasets(config):
 def validate_configuration(config):
     """Validate that the configuration is consistent."""
     surrogate_class = config["surrogate_model"]["class_path"]
-    
+
     featurizer_config = config["data"]["init_args"]["featurizer"]["init_args"]
     representation = featurizer_config.get("representation")
-    
+
     # check for invalid configurations
-    if surrogate_class == "gollum.surrogate_models.gp.GP" and representation == "get_tokens":
-        raise ValueError("Standard GP or PLLM shouldn't use 'get_tokens'. This is for trainable LLM models only.")
-    
+    if (
+        surrogate_class == "gollum.surrogate_models.gp.GP"
+        and representation == "get_tokens"
+    ):
+        raise ValueError(
+            "Standard GP or PLLM shouldn't use 'get_tokens'. This is for trainable LLM models only."
+        )
+
     # Ensure model embedding sizes are correct
     model_name = featurizer_config.get("model_name")
     if model_name in MODEL_EMBEDDING_SIZES:
         embedding_size = MODEL_EMBEDDING_SIZES[model_name]
-        
+
         if "surrogate_model" in config and "init_args" in config["surrogate_model"]:
             if "finetuning_model" in config["surrogate_model"]["init_args"]:
-                current_dim = config["surrogate_model"]["init_args"]["finetuning_model"]["init_args"].get("input_dim")
+                current_dim = config["surrogate_model"]["init_args"][
+                    "finetuning_model"
+                ]["init_args"].get("input_dim")
                 if current_dim != embedding_size:
-                    print(f"Updating input_dim from {current_dim} to {embedding_size} for {model_name}")
-                    config["surrogate_model"]["init_args"]["finetuning_model"]["init_args"]["input_dim"] = embedding_size
-    
+                    print(
+                        f"Updating input_dim from {current_dim} to {embedding_size} for {model_name}"
+                    )
+                    config["surrogate_model"]["init_args"]["finetuning_model"][
+                        "init_args"
+                    ]["input_dim"] = embedding_size
+
     return config
 
 
@@ -189,8 +191,6 @@ def setup_data(config):
     return dm
 
 
-
-
 def setup_bo_optimizer(config, design_space):
     bo_config = config["bo"]["init_args"]
     surrogate_model_config = config["surrogate_model"]
@@ -208,17 +208,14 @@ def setup_bo_optimizer(config, design_space):
 def train(config):
     if config.get("benchmark", None) is not None:
         config = configure_benchmark_datasets(config)
-    
+
     config = validate_configuration(config)
     wandb_config = flatten(config)
-    
-    with wandb.init(
-        project="gollum", config=wandb_config, group=config["group"]
-    ) as run:
 
+    with wandb.init(project="gollum", config=wandb_config, group=config["group"]):
         dm = setup_data(config)
         bo = setup_bo_optimizer(config, design_space=dm.heldout_x)
-        
+
         data_stats = calculate_data_stats(dm.x, dm.y)
         log_data_stats(data_stats)
 
@@ -233,7 +230,6 @@ def train(config):
             x_next = torch.stack(x_next)
 
             log_bo_metrics(data_stats, dm.train_y, epoch=i)
-           
 
             matches = (design_space.unsqueeze(0).to("cuda") == x_next).all(dim=-1)
             indices = matches.nonzero(as_tuple=True)[1].to("cpu")
@@ -305,9 +301,8 @@ def main():
     parser.add_argument("--benchmark", type=str, help="Run a specific benchmark")
 
     parser.add_argument("--n_iters", type=int, help="How many iterations to run")
-   
+
     parser.add_argument("--group", type=str, help="Wandb group runs")
-    
 
     parser.add_subclass_arguments(BaseDataModule, "data", instantiate=False)
     parser.add_subclass_arguments(SurrogateModel, "surrogate_model", instantiate=False)

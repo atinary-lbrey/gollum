@@ -1,4 +1,6 @@
 import torch
+
+
 def get_target_layers(model, proportion=0.25, from_top=True):
     """
     Get target layers based on a proportion of total layers.
@@ -45,9 +47,7 @@ def get_target_layers(model, proportion=0.25, from_top=True):
     target_layer_nums = set(sorted_layer_nums[:num_target_layers])
 
     target_modules = [
-        name
-        for layer_num, name in all_layers
-        if layer_num in target_layer_nums
+        name for layer_num, name in all_layers if layer_num in target_layer_nums
     ]
 
     print(
@@ -57,4 +57,3 @@ def get_target_layers(model, proportion=0.25, from_top=True):
     print(f"Layer numbers selected: {sorted(target_layer_nums)}")
 
     return target_modules
-

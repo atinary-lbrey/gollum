@@ -24,10 +24,9 @@ def log_model_parameters(model, epoch=0):
 
 
 def calculate_model_fit_metrics(posterior, y, stage="train"):
-    preds, variances = posterior.mean, posterior.variance
+    preds, _ = posterior.mean, posterior.variance
 
     preds = posterior.mean.squeeze()
-    variances = posterior.variance.squeeze()
     y = y.squeeze()
     mse = F.mse_loss(preds, y)
     mae = torch.mean(torch.abs(preds - y))
@@ -44,9 +43,9 @@ def calculate_model_fit_metrics(posterior, y, stage="train"):
         f"{stage}/msll": msll.item(),
         f"{stage}/qce": qce.item(),
     }
-    
-   
+
     return metrics
+
 
 def calculate_weighted_metrics(preds, y, stage="full"):
     quantiles = [0.99, 0.95, 0.90, 0.75]
@@ -56,19 +55,21 @@ def calculate_weighted_metrics(preds, y, stage="full"):
         threshold = torch.quantile(y, q)
         weights = torch.where(y >= threshold, 3.0, 1.0)
 
-        w_mse = torch.sum(weights * (preds - y)**2) / torch.sum(weights)
+        w_mse = torch.sum(weights * (preds - y) ** 2) / torch.sum(weights)
         w_mae = torch.sum(weights * torch.abs(preds - y)) / torch.sum(weights)
-        w_r2 = 1 - (torch.sum(weights * (y - preds) ** 2) /
-                    torch.sum(weights * (y - torch.mean(y)) ** 2))
+        w_r2 = 1 - (
+            torch.sum(weights * (y - preds) ** 2)
+            / torch.sum(weights * (y - torch.mean(y)) ** 2)
+        )
 
         weighted_metrics[f"{stage}/weighted_mse@{int(q*100)}"] = w_mse.item()
         weighted_metrics[f"{stage}/weighted_mae@{int(q*100)}"] = w_mae.item()
         weighted_metrics[f"{stage}/weighted_r2@{int(q*100)}"] = w_r2.item()
-    
+
     r2 = 1 - (torch.sum((y - preds) ** 2) / torch.sum((y - torch.mean(y)) ** 2))
     mse = F.mse_loss(preds, y)
     mae = torch.mean(torch.abs(preds - y))
-    
+
     weighted_metrics[f"{stage}/mae"] = mae.item()
     weighted_metrics[f"{stage}/mse"] = mse.item()
     weighted_metrics[f"{stage}/r2"] = r2.item()

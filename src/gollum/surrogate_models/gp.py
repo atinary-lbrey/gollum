@@ -11,8 +11,6 @@ from torch.optim.lr_scheduler import StepLR
 
 from botorch.optim.fit import fit_gpytorch_mll_torch
 import wandb
-from botorch.fit import fit_gpytorch_mll
-from botorch.models import SingleTaskGP
 
 from abc import ABC, abstractmethod
 from gpytorch.means.mean import Mean
@@ -23,7 +21,6 @@ import numpy as np
 import torch
 import gpytorch
 import os
-
 
 
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
@@ -37,7 +34,6 @@ class SurrogateModel(ABC):
     @abstractmethod
     def predict(self, X_test):
         pass
-
 
 
 class GP(SurrogateModel, SingleTaskGP):
@@ -56,7 +52,6 @@ class GP(SurrogateModel, SingleTaskGP):
         initial_lengthscale_val: float = 1.0,
         gp_lr: float = 0.2,
     ) -> None:
-
         super().__init__(
             train_X=train_x,
             train_Y=train_y,
@@ -99,13 +94,9 @@ class GP(SurrogateModel, SingleTaskGP):
         mll = ExactMarginalLogLikelihood(self.likelihood, self)
         mll.train()
         mll = mll.to(self.train_x)
-        
 
         try:
-            
-            fit_gpytorch_mll(
-                mll
-            )
+            fit_gpytorch_mll(mll)
 
         except Exception as e:
             print(f"Exception caught during fit: {str(e)}")
@@ -121,7 +112,9 @@ class GP(SurrogateModel, SingleTaskGP):
         return (
             posterior
             if return_posterior
-            else (posterior.mean, posterior.variance) if return_var else posterior.mean
+            else (posterior.mean, posterior.variance)
+            if return_var
+            else posterior.mean
         )
 
 
@@ -148,7 +141,6 @@ class DeepGP(SurrogateModel, SingleTaskGP):
         train_mll_additionally: bool = False,
         finetuning_model: Union[None, BaseNNFeaturizer] = None,
     ) -> None:
-
         tkwargs = {
             "device": torch.device("cuda" if torch.cuda.is_available() else "cpu"),
             "dtype": torch.float64,
@@ -217,7 +209,7 @@ class DeepGP(SurrogateModel, SingleTaskGP):
 
         mean_x = self.mean_module(self.finetuned)
         covar_x = self.covar_module(self.finetuned)
-        
+
         wandb.log({"lr/llm_lr": self.optimizer.param_groups[0]["lr"]})
         wandb.log({"lr/gp_lr": self.optimizer.param_groups[1]["lr"]})
 
@@ -238,7 +230,6 @@ class DeepGP(SurrogateModel, SingleTaskGP):
         self.finetuning_model.train()
         mll = ExactMarginalLogLikelihood(self.likelihood, self)
         mll.train()
-        total_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         mll.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
         def gp_closure():
@@ -265,28 +256,24 @@ class DeepGP(SurrogateModel, SingleTaskGP):
             lr=self.gp_lr,
             weight_decay=self.wd,
         )
-        
+
         scheduler = StepLR(self.optimizer, step_size=1, gamma=0.95)
         torch.nn.utils.clip_grad_norm_(self.parameters(), max_norm=1.0)
 
         # total_params = sum(p.numel() for p in self.parameters() if p.requires_grad)
         # print(f"Total number of parameters: {total_params}")
-        
-        
+
         fit_gpytorch_mll(
             mll,
             closure=gp_closure,
             optimizer=fit_gpytorch_mll_torch,
             optimizer_kwargs={"optimizer": self.optimizer, "scheduler": scheduler},
-            
         )
 
         if self.train_mll_additionally:
             for param in self.finetuning_model.parameters():
                 param.requires_grad = False
             fit_gpytorch_mll(mll)
-
-        
 
     def predict(
         self, x, observation_noise=True, return_var=True, return_posterior=False
@@ -305,7 +292,7 @@ class DeepGP(SurrogateModel, SingleTaskGP):
         return (
             posterior
             if return_posterior
-            else (posterior.mean, posterior.variance) if return_var else posterior.mean
+            else (posterior.mean, posterior.variance)
+            if return_var
+            else posterior.mean
         )
-
-

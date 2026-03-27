@@ -6,6 +6,7 @@ import pandas as pd
 import os
 from pathlib import Path
 
+
 def fingerprints(smiles, bond_radius=3, nBits=2048):
     """
     Get Morgan fingerprints for a list of SMILES strings.
@@ -29,12 +30,11 @@ def fragments(smiles):
         mol = MolFromSmiles(smiles[i])
         try:
             features = [fragments[d](mol) for d in fragments]
-        except:
-            raise Exception("molecule {}".format(i) + " is not canonicalised")
+        except Exception as e:
+            raise Exception("molecule {}".format(i) + " is not canonicalised") from e
         frags[i, :] = features
 
     return frags
-
 
 
 def mqn_features(smiles):
@@ -45,21 +45,15 @@ def mqn_features(smiles):
     :return: array of mqn featurised molecules
     """
     molecules = [MolFromSmiles(smile) for smile in smiles]
-    mqn_descriptors = [
-        rdMolDescriptors.MQNs_(molecule) for molecule in molecules
-    ]
+    mqn_descriptors = [rdMolDescriptors.MQNs_(molecule) for molecule in molecules]
     return np.asarray(mqn_descriptors)
 
 
 def chemberta_features(smiles):
     # any model weights from the link above will work here
-    model = AutoModelForMaskedLM.from_pretrained(
-        "seyonec/ChemBERTa-zinc-base-v1"
-    )
+    model = AutoModelForMaskedLM.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
     tokenizer = AutoTokenizer.from_pretrained("seyonec/ChemBERTa-zinc-base-v1")
-    tokenized_smiles = [
-        tokenizer(smile, return_tensors="pt") for smile in smiles
-    ]
+    tokenized_smiles = [tokenizer(smile, return_tensors="pt") for smile in smiles]
     outputs = [
         model(
             input_ids=tokenized_smile["input_ids"],
@@ -73,12 +67,11 @@ def chemberta_features(smiles):
     )
     return embeddings.detach().numpy()
 
+
 def cddd(smiles):
     current_path = os.getcwd()
     os.chdir(Path(os.path.abspath(__file__)).parent)
-    cddd = pd.read_csv(
-        "precalculated_featurisation/cddd_additives_descriptors.csv"
-    )
+    cddd = pd.read_csv("precalculated_featurisation/cddd_additives_descriptors.csv")
     cddd_array = np.zeros((cddd.shape[0], 512))
     for i, smile in enumerate(smiles):
         row = cddd[cddd["smiles"] == smile][cddd.columns[3:]].values

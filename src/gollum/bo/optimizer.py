@@ -5,6 +5,7 @@ from torch import Tensor
 import torch
 import warnings
 
+
 class BotorchOptimizer:
     def __init__(
         self,
@@ -18,7 +19,6 @@ class BotorchOptimizer:
             "dtype": torch.float64,
         },
     ):
-
         self.design_space = design_space
         self.surrogate_model_config = (
             surrogate_model_config or BotorchOptimizer.default_surrogate_model_config()
@@ -32,7 +32,6 @@ class BotorchOptimizer:
 
         self.tkwargs = tkwargs
         print("Using device:", self.tkwargs["device"])
-
 
     def lie_to_me(self, candidate, train_y, strategy="kriging"):
         supported_strategies = ["cl_min", "cl_mean", "cl_max", "kriging"]
@@ -100,14 +99,13 @@ class BotorchOptimizer:
         design_space,
     ):
         with torch.no_grad():
-            X = design_space.unsqueeze(-2)  
+            X = design_space.unsqueeze(-2)
             acq_values = self.acquisition_function(X).squeeze(-1)
         best_indices = acq_values.topk(1)[1]
         best_point = X[best_indices].squeeze(1)
         return best_point
 
     def optimize_acquisition_function_batch(self, train_x, train_y, design_space):
-
         if self.batch_strategy in ["kriging", "cl_min", "cl_mean", "cl_max"]:
             candidates = []
             candidate_indices = []
@@ -170,6 +168,5 @@ class BotorchOptimizer:
         params = {"model": self.surrogate_model}
         if "ExpectedImprovement" in self.acq_function_config["class_path"]:
             params["best_f"] = train_y.max().item()
-           
 
         return params

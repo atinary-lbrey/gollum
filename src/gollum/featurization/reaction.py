@@ -1,10 +1,11 @@
-import numpy as np 
+import numpy as np
 import pandas as pd
 from drfp import DrfpEncoder
 from rxnfp.transformer_fingerprints import (
     RXNBERTFingerprintGenerator,
     get_default_model_and_tokenizer,
 )
+
 
 def drfp(reaction_smiles, bond_radius=3, nBits=2048):
     """
@@ -16,9 +17,7 @@ def drfp(reaction_smiles, bond_radius=3, nBits=2048):
     :return: array of shape [len(reaction_smiles), nBits] with drfp featurised reactions
 
     """
-    fps = DrfpEncoder.encode(
-        reaction_smiles, n_folded_length=nBits, radius=bond_radius
-    )
+    fps = DrfpEncoder.encode(reaction_smiles, n_folded_length=nBits, radius=bond_radius)
     print(np.array(fps, dtype=np.float64).shape, "drfp vectors shape")
 
     return np.array(fps, dtype=np.float64)
@@ -38,6 +37,7 @@ def one_hot(df):
     df_ohe = pd.get_dummies(df)
     return df_ohe.to_numpy(dtype=np.float64)
 
+
 def rxnfp(reaction_smiles):
     """
     https://rxn4chemistry.github.io/rxnfp/
@@ -52,4 +52,3 @@ def rxnfp(reaction_smiles):
     rxnfp_generator = RXNBERTFingerprintGenerator(rxn_model, tokenizer)
     rxnfps = [rxnfp_generator.convert(smile) for smile in reaction_smiles]
     return np.array(rxnfps, dtype=np.float64)
-

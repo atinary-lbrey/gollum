@@ -1,21 +1,27 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Optional, List
 from peft import LoraConfig, get_peft_model
-from gollum.featurization.utils.pooling import average_pool, last_token_pool, weighted_average_pool
+from gollum.featurization.utils.pooling import (
+    average_pool,
+    last_token_pool,
+    weighted_average_pool,
+)
 from gollum.featurization.text import get_model_and_tokenizer
 from gollum.featurization.utils.layers import get_target_layers
 from torch.nn import init
+
 
 class BaseNNFeaturizer(nn.Module):
     """
     Base class for neural network-based featurizers.
     Combines nn.Module functionality with the BaseFeaturizer interface.
-    
+
     This is specifically for featurizers that need neural network capabilities, such as LLM-based featurizers.
     """
+
     def __init__(
         self,
         input_dim: int = 768,
@@ -24,25 +30,25 @@ class BaseNNFeaturizer(nn.Module):
         super().__init__()
         self.input_dim = input_dim
         self.projection_dim = projection_dim
-    
+
     @property
     def output_dim(self) -> int:
         """
         Returns the output dimension of the featurizer.
-        
+
         Returns:
             int: Output dimension
         """
         return self._output_dim
-    
+
     @abstractmethod
     def forward(self, x):
         """
         Forward pass through the neural network.
-        
+
         Args:
             x: Input tensor
-            
+
         Returns:
             torch.Tensor: Output tensor
         """
@@ -86,9 +92,7 @@ class LLMFeaturizer(BaseNNFeaturizer):
         print(model_name, "for LLM")
         self.llm, self.tokenizer = get_model_and_tokenizer(model_name, "cuda")
         if trainable:
-            target_modules = get_target_layers(
-                self.llm, target_ratio, from_top
-            )
+            target_modules = get_target_layers(self.llm, target_ratio, from_top)
 
             self.llm = get_peft_model(
                 self.llm,
@@ -120,9 +124,7 @@ class LLMFeaturizer(BaseNNFeaturizer):
         else:
             self.projector = nn.Identity()
 
-        self.llm = self.llm.to(
-            device=torch.device("cuda"), dtype=torch.float32
-        )
+        self.llm = self.llm.to(device=torch.device("cuda"), dtype=torch.float32)
         self.projector = self.projector.to(
             device=torch.device("cuda"), dtype=torch.float32
         )
@@ -140,23 +142,18 @@ class LLMFeaturizer(BaseNNFeaturizer):
 
         current_idx = 0
         for start_idx in range(0, n_points, batch_size):
-
             torch.cuda.empty_cache()
             end_idx = min(start_idx + batch_size, n_points)
             input_ids = x[start_idx:end_idx, :ids_split].long()
             attn_mask = x[start_idx:end_idx, ids_split:].long()
 
             if self.trainable:
-                outputs = self.llm(
-                    input_ids=input_ids, attention_mask=attn_mask
-                )
+                outputs = self.llm(input_ids=input_ids, attention_mask=attn_mask)
 
             else:
                 self.llm.eval()
                 with torch.no_grad():
-                    outputs = self.llm(
-                        input_ids=input_ids, attention_mask=attn_mask
-                    )
+                    outputs = self.llm(input_ids=input_ids, attention_mask=attn_mask)
 
             last_hidden_state = outputs.last_hidden_state
 
@@ -169,9 +166,7 @@ class LLMFeaturizer(BaseNNFeaturizer):
             elif self.pooling_method == "weighted_average":
                 pooled = weighted_average_pool(last_hidden_state, attn_mask)
             else:
-                raise ValueError(
-                    f"Unknown pooling method: {self.pooling_method}"
-                )
+                raise ValueError(f"Unknown pooling method: {self.pooling_method}")
 
             if self.normalize_embeddings:
                 pooled = F.normalize(pooled, p=2, dim=1)
@@ -181,21 +176,18 @@ class LLMFeaturizer(BaseNNFeaturizer):
             current_idx += batch_size
             del outputs, last_hidden_state, pooled
             torch.cuda.empty_cache()
-        
+
         embeddings = torch.cat(embedding_chunks, dim=0)
         return embeddings
 
     def forward(self, x):
-
         # case because of botorch acquisition function
         if x.dim() == 3:
-
             n_candidates, n_train, d = x.shape
             train_data = x[0, : n_train - 1, :]
             # TODO update when batch
             all_candidates = x[:, n_train - 1, :]
             with torch.no_grad():
-
                 train_embeddings = self.get_embeddings(train_data)
                 all_candidate_embeddings = self.get_embeddings(all_candidates)
 
@@ -203,9 +195,7 @@ class LLMFeaturizer(BaseNNFeaturizer):
                 n_candidates, -1, -1
             )
             candidate_embeddings = all_candidate_embeddings.unsqueeze(1)
-            embeddings = torch.cat(
-                [train_embeddings, candidate_embeddings], dim=1
-            )
+            embeddings = torch.cat([train_embeddings, candidate_embeddings], dim=1)
 
         elif x.dim() == 2:
             embeddings = self.get_embeddings(x)

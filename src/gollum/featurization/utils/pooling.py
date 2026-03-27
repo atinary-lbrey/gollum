@@ -1,9 +1,8 @@
 import torch
 
+
 def average_pool(last_hidden_states, attention_mask):
-    last_hidden = last_hidden_states.masked_fill(
-        ~attention_mask[..., None].bool(), 0.0
-    )
+    last_hidden = last_hidden_states.masked_fill(~attention_mask[..., None].bool(), 0.0)
     return last_hidden.sum(dim=1) / attention_mask.sum(dim=1)[..., None]
 
 
@@ -14,7 +13,8 @@ def last_token_pool(last_hidden_states, attention_mask, left_padding=False):
     return last_hidden_states[
         torch.arange(last_hidden_states.size(0)), sequence_lengths
     ]
-    
+
+
 def weighted_average_pool(last_hidden_states, attention_mask):
     seq_length = last_hidden_states.size(1)
     weights = (
