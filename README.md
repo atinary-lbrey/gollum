@@ -37,25 +37,22 @@
 
 ### 📦 Project Dependencies
 
-You can install the environment from a file:
+You can install the environment with uv:
 
 ```bash
-# Recommended (Conda)
-conda env create -f environment.yaml
-conda activate gollum
-
-# OR (pip-only)
-pip install -r requirements.txt
+uv sync
+uv pip install rxnfp --no-deps
 ```
 
-For manual setup or more details, see [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md).
+This will create a `.venv` and install the required packages
+For manual setup or more details, see [DEPENDENCIES.md](DEPENDENCIES.md).
 
 ---
 
 ### 🛠 Install GOLLuM in editable mode
 
 ```bash
-pip install -e .
+uv pip install -e .
 ```
 
 ---
