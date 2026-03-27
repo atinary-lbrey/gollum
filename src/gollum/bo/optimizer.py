@@ -75,7 +75,6 @@ class BotorchOptimizer:
         design_space,
     ):
         self.train_surrogate_model(train_x, train_y)
-
         additional_acq_function_params = self.update_acquisition_function_params(
             train_y
         )
@@ -108,12 +107,10 @@ class BotorchOptimizer:
     def optimize_acquisition_function_batch(self, train_x, train_y, design_space):
         if self.batch_strategy in ["kriging", "cl_min", "cl_mean", "cl_max"]:
             candidates = []
-            candidate_indices = []
-            candidate_acq_values = []
 
-            for i in range(self.batch_size):
-                best_point, best_indices, acq_values = (
-                    self.optimize_acquisition_function(design_space)
+            for _ in range(self.batch_size):
+                best_point, best_index = self.optimize_acquisition_function(
+                    design_space
                 )
                 y_lie = self.lie_to_me(
                     best_point, train_y, strategy=self.batch_strategy
@@ -121,13 +118,11 @@ class BotorchOptimizer:
                 train_x = torch.cat([train_x, best_point])
                 train_y = torch.cat([train_y, y_lie])
 
-                design_space = torch_delete_rows(design_space, best_indices)
+                design_space = torch_delete_rows(design_space, best_index)
 
                 candidates.append(best_point)
-                candidate_indices.append(best_indices.item())
-                candidate_acq_values.append(acq_values)
 
-        return candidates, candidate_indices, candidate_acq_values
+        return candidates
 
     @staticmethod
     def default_surrogate_model_config():

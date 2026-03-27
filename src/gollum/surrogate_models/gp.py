@@ -289,10 +289,8 @@ class DeepGP(SurrogateModel, SingleTaskGP):
         with torch.no_grad():
             posterior = self.posterior(x, observation_noise=observation_noise)
 
-        return (
-            posterior
-            if return_posterior
-            else (posterior.mean, posterior.variance)
-            if return_var
-            else posterior.mean
-        )
+        if return_posterior:
+            return posterior
+        if return_var:
+            return (posterior.mean, posterior.variance)
+        return posterior.mean
