@@ -219,6 +219,22 @@ def train(config):
         data_stats = calculate_data_stats(dm.x, dm.y)
         log_data_stats(data_stats)
 
+        # Log initial points as iterations 1..n_init
+        initial_y = dm.train_y.squeeze().numpy()
+        n_init = len(initial_y)
+        best_so_far = None
+
+        for init_step, y_val in enumerate(initial_y, start=1):
+            best_so_far = (
+                float(y_val) if best_so_far is None else max(best_so_far, float(y_val))
+            )
+            wandb.log(
+                {
+                    "train/best_so_far": best_so_far,
+                    "epoch": init_step,
+                }
+            )
+
         # Start the training loop
         for i in tqdm(range(config["n_iters"]), colour="blue"):
             train_x = dm.train_x.clone().to("cuda")
@@ -229,7 +245,7 @@ def train(config):
             x_next = bo.suggest_next_experiments(train_x, train_y, design_space)
             x_next = torch.stack(x_next)
 
-            log_bo_metrics(data_stats, dm.train_y, epoch=i)
+            log_bo_metrics(data_stats, dm.train_y, epoch=n_init + i + 1)
 
             matches = (design_space.unsqueeze(0).to("cuda") == x_next).all(dim=-1)
             indices = matches.nonzero(as_tuple=True)[1].to("cpu")
@@ -240,7 +256,7 @@ def train(config):
             wandb.log(
                 {
                     "evaluated_suggestions": wandb.Histogram(dm.heldout_y[indices]),
-                    "epoch": i,
+                    "epoch": n_init + i + 1,
                 }
             )
 
@@ -281,7 +297,7 @@ def train(config):
             total_indices = len(dm.train_indexes) + len(dm.heldout_indices)
             assert total_indices == len(dm.x), "Mismatch in the total number of indices"
 
-        log_bo_metrics(data_stats, dm.train_y, epoch=config["n_iters"])
+        log_bo_metrics(data_stats, dm.train_y, epoch=n_init + config["n_iters"])
         logger.setLevel(logging.INFO)
         wandb.finish()
 
