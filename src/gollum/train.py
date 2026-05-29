@@ -230,7 +230,6 @@ def train(config):
             )
             wandb.log(
                 {
-                    "observed_y": float(y_val),
                     "train/best_so_far": best_so_far,
                     "epoch": epoch_counter,
                 }
@@ -247,19 +246,16 @@ def train(config):
             x_next = bo.suggest_next_experiments(train_x, train_y, design_space)
             x_next = torch.stack(x_next)
 
-            log_bo_metrics(data_stats, dm.train_y, epoch=epoch_counter)
+            #log_bo_metrics(data_stats, dm.train_y, epoch=epoch_counter)
 
             matches = (design_space.unsqueeze(0).to("cuda") == x_next).all(dim=-1)
             indices = matches.nonzero(as_tuple=True)[1].to("cpu")
 
             if not torch.all(matches.sum(dim=-1) == 1):
                 print("Unable to find a unique match for some x_next in the dataset.")
-
-            observed_y = dm.heldout_y[indices].cpu().numpy().reshape(-1).tolist()
             wandb.log(
                 {
                     "evaluated_suggestions": wandb.Histogram(dm.heldout_y[indices]),
-                    "observed_y": [float(v) for v in observed_y],
                     "epoch": epoch_counter,
                 }
             )
@@ -300,10 +296,9 @@ def train(config):
             ), f"Common indices found between train and heldout: {common_indices}"
             total_indices = len(dm.train_indexes) + len(dm.heldout_indices)
             assert total_indices == len(dm.x), "Mismatch in the total number of indices"
-
+            log_bo_metrics(data_stats, dm.train_y, epoch=epoch_counter)
             epoch_counter += 1
 
-        log_bo_metrics(data_stats, dm.train_y, epoch=epoch_counter)
         logger.setLevel(logging.INFO)
         wandb.finish()
 
